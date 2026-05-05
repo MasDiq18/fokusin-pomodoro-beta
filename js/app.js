@@ -1184,15 +1184,36 @@ function saveCycleFocusCount() {
     setJSON(`cycle_focus_count_${currentUser.username}`, cycleFocusCount);
 }
 
+function loadGlobalTheme() {
+  return getJSON("global_theme", "light");
+}
+
+function saveGlobalTheme() {
+  setJSON("global_theme", settings.theme);
+}
+
+function saveThemePreference() {
+  saveGlobalTheme();
+
+  if (currentUser) {
+    saveSettings();
+  }
+}
+
 function loadSettings() {
-    return {
-        ...DEFAULT_SETTINGS,
-        ...getJSON(`settings_${currentUser.username}`, {})
-    };
+  return {
+    ...DEFAULT_SETTINGS,
+    theme: loadGlobalTheme(),
+    ...getJSON(`settings_${currentUser.username}`, {})
+  };
 }
 
 function saveSettings() {
-    setJSON(`settings_${currentUser.username}`, settings);
+  if (!currentUser) {
+    return;
+  }
+
+  setJSON(`settings_${currentUser.username}`, settings);
 }
 
 function loadStats() {
@@ -1350,13 +1371,15 @@ async function playMusicSafely() {
 }
 
 function applyTheme() {
-    const isDark = settings.theme === "dark";
+  const isDark = settings.theme === "dark";
 
-    document.body.classList.toggle("theme-dark", isDark);
+  document.body.classList.toggle("theme-dark", isDark);
 
+  if (elements.themeToggleIcon) {
     elements.themeToggleIcon.className = isDark
-        ? "bi bi-sun"
-        : "bi bi-moon-stars";
+      ? "bi bi-sun"
+      : "bi bi-moon-stars";
+  }
 }
 
 function renderFocusedTask() {
