@@ -9,8 +9,44 @@ const DEFAULT_SETTINGS = {
     shortMinutes: 5,
     longMinutes: 15,
     autoMusic: false,
-    musicVolume: 0.65
+    musicVolume: 0.65,
+    selectedMusic: "generated",
+    dailyTarget: 4,
+    theme: "light"
 };
+
+const MUSIC_TRACKS = [
+    {
+        id: "generated",
+        label: "Lofi Synth Bawaan",
+        type: "generated",
+        src: null
+    },
+    {
+        id: "lofi-chill",
+        label: "Lofi Chill",
+        type: "audio",
+        src: "./audio/lofi-chill.mp3"
+    },
+    {
+        id: "rain-focus",
+        label: "Rain Focus",
+        type: "audio",
+        src: "./audio/rain-focus.mp3"
+    },
+    {
+        id: "cafe-ambience",
+        label: "Cafe Ambience",
+        type: "audio",
+        src: "./audio/cafe-ambience.mp3"
+    },
+    {
+        id: "nature-calm",
+        label: "Nature Calm",
+        type: "audio",
+        src: "./audio/nature-calm.mp3"
+    }
+];
 
 const STANDARD_CYCLE_SETTINGS = {
     focusMinutes: 25,
@@ -26,6 +62,8 @@ let currentUser = null;
 let settings = { ...DEFAULT_SETTINGS };
 let stats = { completedSessions: 0 };
 let timer = null;
+
+let focusedTaskId = null;
 
 let cycleModeEnabled = false;
 let cycleFocusCount = 0;
@@ -72,6 +110,30 @@ const elements = {
     profileUsername: document.getElementById("profileUsername"),
     profileCreatedAt: document.getElementById("profileCreatedAt"),
     profileMessage: document.getElementById("profileMessage"),
+
+    themeToggleBtn: document.getElementById("themeToggleBtn"),
+    themeToggleIcon: document.getElementById("themeToggleIcon"),
+
+    focusedTaskBox: document.getElementById("focusedTaskBox"),
+    focusedTaskName: document.getElementById("focusedTaskName"),
+    clearFocusedTaskBtn: document.getElementById("clearFocusedTaskBtn"),
+
+    dailyTargetSelect: document.getElementById("dailyTargetSelect"),
+    dailyTargetProgressBar: document.getElementById("dailyTargetProgressBar"),
+    dailyTargetProgressText: document.getElementById("dailyTargetProgressText"),
+
+    streakCalendar: document.getElementById("streakCalendar"),
+
+    musicTrackSelect: document.getElementById("musicTrackSelect"),
+    musicAudio: document.getElementById("musicAudio"),
+
+    toastContainer: document.getElementById("toastContainer"),
+
+    sessionPopup: document.getElementById("sessionPopup"),
+    sessionPopupTitle: document.getElementById("sessionPopupTitle"),
+    sessionPopupMessage: document.getElementById("sessionPopupMessage"),
+    sessionPopupNextText: document.getElementById("sessionPopupNextText"),
+    sessionPopupActionBtn: document.getElementById("sessionPopupActionBtn"),
 
     modeButtons: document.querySelectorAll(".mode-tab"),
     progressSvg: document.getElementById("progressSvg"),
@@ -367,7 +429,7 @@ function bindAppEvents() {
         };
 
         if (!isValidDurationSettings(nextSettings)) {
-            alert("Durasi tidak valid. Gunakan angka positif sesuai batas input.");
+            showToast("Durasi tidak valid", "Gunakan angka positif sesuai batas input.");
             return;
         }
 
@@ -389,25 +451,46 @@ function bindAppEvents() {
             elements.taskInput.value = "";
             renderTasks();
         } catch (error) {
-            alert(error.message);
+            showToast("Error", error.message);
         }
     });
 
     elements.taskList.addEventListener("click", (event) => {
-        const taskId = event.target.dataset.id;
+        const checkbox = event.target.closest(".task-check");
+        const deleteButton = event.target.closest(".delete-task");
+        const focusButton = event.target.closest(".focus-task-btn");
 
-        if (!taskId) {
+        if (checkbox) {
+            TodoService.toggle(currentUser.username, checkbox.dataset.id);
+            renderTasks();
+            renderFocusedTask();
             return;
         }
 
-        if (event.target.classList.contains("task-check")) {
-            TodoService.toggle(currentUser.username, taskId);
+        if (focusButton) {
+            focusedTaskId = focusButton.dataset.id;
+            saveFocusedTaskId();
             renderTasks();
+            renderFocusedTask();
+
+            showToast("Task difokuskan", "Timer sekarang terhubung dengan task pilihanmu.");
+            return;
         }
 
-        if (event.target.classList.contains("delete-task")) {
+        if (deleteButton) {
+            const taskId = deleteButton.dataset.id;
+
             TodoService.remove(currentUser.username, taskId);
+
+            if (focusedTaskId === taskId) {
+                focusedTaskId = null;
+                saveFocusedTaskId();
+            }
+
             renderTasks();
+            renderFocusedTask();
+
+            showToast("Task dihapus", "Task berhasil dihapus dari list aktif.");
         }
     });
 
@@ -486,42 +569,101 @@ function bindAppEvents() {
             disableCycleMode();
         }
     });
+
+    elements.themeToggleBtn.addEventListener("click", () => {
+        settings.theme = settings.theme === "dark" ? "light" : "dark";
+
+        saveSettings();
+        applyTheme();
+
+        showToast(
+            "Tema diperbarui",
+            settings.theme === "dark"
+                ? "Mode gelap diaktifkan."
+                : "Mode terang diaktifkan."
+        );
+    });
+
+    elements.clearFocusedTaskBtn.addEventListener("click", () => {
+        focusedTaskId = null;
+        saveFocusedTaskId();
+        renderFocusedTask();
+        renderTasks();
+
+        showToast("Task dilepas", "Tidak ada task yang sedang difokuskan.");
+    });
+
+    elements.dailyTargetSelect.addEventListener("change", () => {
+        settings.dailyTarget = Number(elements.dailyTargetSelect.value);
+        saveSettings();
+        renderDailyTarget();
+
+        showToast(
+            "Target harian diperbarui",
+            `Target hari ini menjadi ${settings.dailyTarget} sesi Focus.`
+        );
+    });
+
+    elements.musicTrackSelect.addEventListener("change", () => {
+        settings.selectedMusic = elements.musicTrackSelect.value;
+        saveSettings();
+
+        lofiPlayer.setTrack(getSelectedMusicTrack());
+        updateMusicButton();
+
+        showToast(
+            "Musik diganti",
+            `Pilihan musik sekarang: ${getSelectedMusicTrack().label}.`
+        );
+    });
+
+    elements.sessionPopupActionBtn.addEventListener("click", () => {
+        elements.sessionPopup.classList.add("d-none");
+    });
 }
 
 function startUserSession() {
-  settings = loadSettings();
-  stats = normalizeStats(loadStats());
-  saveStats();
+    settings = loadSettings();
+    stats = normalizeStats(loadStats());
+    saveStats();
 
-  cycleModeEnabled = loadCycleMode();
-  cycleFocusCount = loadCycleFocusCount();
+    focusedTaskId = loadFocusedTaskId();
 
-  if (cycleModeEnabled) {
-    settings = {
-      ...settings,
-      ...STANDARD_CYCLE_SETTINGS
-    };
+    cycleModeEnabled = loadCycleMode();
+    cycleFocusCount = loadCycleFocusCount();
 
-    saveSettings();
-  }
+    if (cycleModeEnabled) {
+        settings = {
+            ...settings,
+            ...STANDARD_CYCLE_SETTINGS
+        };
 
-  renderUser();
-  renderSettingsForm();
-  renderTaskLists();
-  renderTasks();
-  renderSessionDots();
-  renderStats();
-  renderStreakCard();
-  renderCycleMode();
+        saveSettings();
+    }
 
-  initTimer();
+    applyTheme();
 
-  applyCycleModeLock();
+    renderUser();
+    renderSettingsForm();
+    renderTaskLists();
+    renderTasks();
+    renderFocusedTask();
+    renderSessionDots();
+    renderStats();
+    renderStreakCard();
+    renderDailyTarget();
+    renderCycleMode();
 
-  lofiPlayer.setVolume(settings.musicVolume);
-  updateMusicButton();
+    initTimer();
 
-  showAppView();
+    applyCycleModeLock();
+
+    lofiPlayer.setAudioElement(elements.musicAudio);
+    lofiPlayer.setTrack(getSelectedMusicTrack());
+    lofiPlayer.setVolume(settings.musicVolume);
+    updateMusicButton();
+
+    showAppView();
 }
 
 function initTimer() {
@@ -543,58 +685,59 @@ function initTimer() {
 }
 
 function handleTimerComplete(completedMode) {
-  playNotificationBeep();
+    playNotificationBeep();
 
-  if (completedMode === "focus") {
-    updateFocusCompletionStats();
+    if (completedMode === "focus") {
+        updateFocusCompletionStats();
 
-    if (cycleModeEnabled) {
-      cycleFocusCount += 1;
-      saveCycleFocusCount();
+        if (cycleModeEnabled) {
+            cycleFocusCount += 1;
+            saveCycleFocusCount();
+        }
+
+        saveStats();
+        renderStats();
+        renderSessionDots();
+        renderStreakCard();
+        renderDailyTarget();
+        renderCycleMode();
     }
 
-    saveStats();
-    renderStats();
-    renderSessionDots();
-    renderStreakCard();
-    renderCycleMode();
-  }
+    const nextMode = getAutoNextMode(completedMode);
 
-  const nextMode = getAutoNextMode(completedMode);
+    showSessionCompletePopup(completedMode, nextMode);
 
-  alert(`${MODES[completedMode].displayName} selesai. Lanjut ke ${MODES[nextMode].displayName}.`);
+    timer.setMode(nextMode);
+    saveCurrentMode(nextMode);
 
-  timer.setMode(nextMode);
-  saveCurrentMode(nextMode);
+    if (cycleModeEnabled && completedMode === "long") {
+        cycleFocusCount = 0;
+        saveCycleFocusCount();
+        renderCycleMode();
+    }
 
-  if (cycleModeEnabled && completedMode === "long") {
-    cycleFocusCount = 0;
-    saveCycleFocusCount();
-    renderCycleMode();
-  }
-
-  if (settings.autoMusic) {
-    lofiPlayer.pause();
-    updateMusicButton();
-  }
+    if (settings.autoMusic) {
+        lofiPlayer.pause();
+        updateMusicButton();
+    }
 }
 
 function getAutoNextMode(completedMode) {
-  if (completedMode !== "focus") {
-    return "focus";
-  }
+    if (completedMode !== "focus") {
+        return "focus";
+    }
 
-  if (cycleModeEnabled) {
+    if (cycleModeEnabled) {
+        const shouldTakeLongBreak =
+            cycleFocusCount > 0 && cycleFocusCount % 4 === 0;
+
+        return shouldTakeLongBreak ? "long" : "short";
+    }
+
     const shouldTakeLongBreak =
-      cycleFocusCount > 0 && cycleFocusCount % 4 === 0;
+        stats.completedSessions > 0 && stats.completedSessions % 4 === 0;
 
     return shouldTakeLongBreak ? "long" : "short";
-  }
-
-  const shouldTakeLongBreak =
-    stats.completedSessions > 0 && stats.completedSessions % 4 === 0;
-
-  return shouldTakeLongBreak ? "long" : "short";
 }
 
 function getManualNextMode(currentMode) {
@@ -726,44 +869,48 @@ function renderUser() {
 }
 
 function renderSettingsForm() {
-  elements.focusMinutes.value = settings.focusMinutes;
-  elements.shortMinutes.value = settings.shortMinutes;
-  elements.longMinutes.value = settings.longMinutes;
+    elements.focusMinutes.value = settings.focusMinutes;
+    elements.shortMinutes.value = settings.shortMinutes;
+    elements.longMinutes.value = settings.longMinutes;
 
-  elements.autoMusicCheck.checked = settings.autoMusic;
-  elements.musicVolume.value = settings.musicVolume;
+    elements.autoMusicCheck.checked = settings.autoMusic;
+    elements.musicVolume.value = settings.musicVolume;
+    elements.musicTrackSelect.value = settings.selectedMusic;
+    elements.dailyTargetSelect.value = String(settings.dailyTarget);
 
-  if (timer) {
-    elements.durationValue.textContent = settings[getSettingKeyByMode(timer.mode)];
-  }
+    if (timer) {
+        elements.durationValue.textContent = settings[getSettingKeyByMode(timer.mode)];
+    }
 
-  applyCycleModeLock();
+    applyCycleModeLock();
 }
 
 function renderStats() {
-  elements.sessionCount.textContent = stats.completedSessions;
+    elements.sessionCount.textContent = stats.completedSessions;
 }
 
 function renderStreakCard() {
-  if (!elements.streakFlame) {
-    return;
-  }
+    if (!elements.streakFlame) {
+        return;
+    }
 
-  const today = getTodayDateKey();
-  const todaySessions = Number(stats.dailySessions[today] || 0);
-  const hasCompletedToday = todaySessions > 0;
+    const today = getTodayDateKey();
+    const todaySessions = Number(stats.dailySessions[today] || 0);
+    const hasCompletedToday = todaySessions > 0;
 
-  elements.streakFlame.classList.toggle("streak-active", hasCompletedToday);
-  elements.streakNumber.textContent = stats.currentStreak;
-  elements.todaySessionCount.textContent = todaySessions;
+    elements.streakFlame.classList.toggle("streak-active", hasCompletedToday);
+    elements.streakNumber.textContent = stats.currentStreak;
+    elements.todaySessionCount.textContent = todaySessions;
 
-  if (hasCompletedToday) {
-    elements.streakStatusText.textContent =
-      `Streak menyala. Kamu sudah menyelesaikan ${todaySessions} sesi Focus hari ini.`;
-  } else {
-    elements.streakStatusText.textContent =
-      "Selesaikan 1 sesi Focus hari ini untuk menyalakan streak.";
-  }
+    if (hasCompletedToday) {
+        elements.streakStatusText.textContent =
+            `Streak menyala. Kamu sudah menyelesaikan ${todaySessions} sesi Focus hari ini.`;
+    } else {
+        elements.streakStatusText.textContent =
+            "Selesaikan 1 sesi Focus hari ini untuk menyalakan streak.";
+    }
+
+    renderStreakCalendar();
 }
 
 function renderSessionDots() {
@@ -817,77 +964,91 @@ function renderTasks() {
         const item = document.createElement("li");
         item.className = "list-group-item task-item";
 
+        const isFocused = task.id === focusedTaskId;
+
         item.innerHTML = `
-      <div class="d-flex align-items-center justify-content-between gap-3">
-        <div class="form-check d-flex align-items-center gap-2 mb-0">
-          <input
-            class="form-check-input task-check"
-            type="checkbox"
-            data-id="${task.id}"
-            ${task.completed ? "checked" : ""}
-          />
+    <div class="d-flex align-items-center justify-content-between gap-3">
+      <div class="form-check d-flex align-items-center gap-2 mb-0">
+        <input
+          class="form-check-input task-check"
+          type="checkbox"
+          data-id="${task.id}"
+          ${task.completed ? "checked" : ""}
+        />
 
-          <label class="form-check-label task-name ${task.completed ? "completed" : ""}">
-            ${escapeHTML(task.name)}
-          </label>
-        </div>
+        <label class="form-check-label task-name ${task.completed ? "completed" : ""}">
+          ${escapeHTML(task.name)}
+        </label>
+      </div>
 
+      <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
         <button
-          class="btn btn-sm btn-outline-danger delete-task"
+          class="btn btn-sm ${isFocused ? "btn-accent" : "btn-outline-secondary"} focus-task-btn"
           data-id="${task.id}"
           type="button"
         >
-          Hapus
+          ${isFocused ? "Aktif" : "Fokuskan"}
         </button>
+
+        <button
+  class="btn btn-sm btn-outline-danger delete-task delete-task-icon-btn"
+  data-id="${task.id}"
+  type="button"
+  title="Hapus tugas"
+  aria-label="Hapus tugas"
+>
+  <i class="bi bi-trash"></i>
+</button>
       </div>
-    `;
+    </div>
+  `;
 
         elements.taskList.appendChild(item);
     });
 }
 
 function renderProfile() {
-  elements.profileName.value = currentUser.name;
-  elements.profileEmail.value = currentUser.email;
-  elements.profileUsername.value = currentUser.username;
+    elements.profileName.value = currentUser.name;
+    elements.profileEmail.value = currentUser.email;
+    elements.profileUsername.value = currentUser.username;
 
-  const createdDate = new Date(currentUser.createdAt).toLocaleString("id-ID", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  });
+    const createdDate = new Date(currentUser.createdAt).toLocaleString("id-ID", {
+        dateStyle: "medium",
+        timeStyle: "short"
+    });
 
-  elements.profileCreatedAt.textContent = `Akun dibuat pada ${createdDate}.`;
+    elements.profileCreatedAt.textContent = `Akun dibuat pada ${createdDate}.`;
 
-  renderProfileStats();
-  clearMessage(elements.profileMessage);
+    renderProfileStats();
+    clearMessage(elements.profileMessage);
 }
 
 function renderProfileStats() {
-  if (!elements.profileCompletedSessions) {
-    return;
-  }
+    if (!elements.profileCompletedSessions) {
+        return;
+    }
 
-  elements.profileCompletedSessions.textContent = stats.completedSessions;
-  elements.profileCurrentStreak.textContent = `${stats.currentStreak} hari`;
-  elements.profileLongestStreak.textContent = `${stats.longestStreak} hari`;
-  elements.profileTotalFocus.textContent = formatFocusMinutes(stats.totalFocusMinutes);
+    elements.profileCompletedSessions.textContent = stats.completedSessions;
+    elements.profileCurrentStreak.textContent = `${stats.currentStreak} hari`;
+    elements.profileLongestStreak.textContent = `${stats.longestStreak} hari`;
+    elements.profileTotalFocus.textContent = formatFocusMinutes(stats.totalFocusMinutes);
 }
 
 function formatFocusMinutes(totalMinutes) {
-  const minutes = Number(totalMinutes || 0);
+    const minutes = Number(totalMinutes || 0);
 
-  if (minutes < 60) {
-    return `${minutes} menit`;
-  }
+    if (minutes < 60) {
+        return `${minutes} menit`;
+    }
 
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
 
-  if (remainingMinutes === 0) {
-    return `${hours} jam`;
-  }
+    if (remainingMinutes === 0) {
+        return `${hours} jam`;
+    }
 
-  return `${hours} jam ${remainingMinutes} menit`;
+    return `${hours} jam ${remainingMinutes} menit`;
 }
 
 function showAuthView() {
@@ -917,103 +1078,103 @@ function showProfileView() {
 }
 
 function enableCycleMode() {
-  cycleModeEnabled = true;
-  cycleFocusCount = 0;
+    cycleModeEnabled = true;
+    cycleFocusCount = 0;
 
-  settings = {
-    ...settings,
-    ...STANDARD_CYCLE_SETTINGS
-  };
+    settings = {
+        ...settings,
+        ...STANDARD_CYCLE_SETTINGS
+    };
 
-  saveSettings();
-  saveCycleMode();
-  saveCycleFocusCount();
+    saveSettings();
+    saveCycleMode();
+    saveCycleFocusCount();
 
-  if (timer) {
-    timer.stop();
-    timer.updateDurations(settings);
-    timer.setMode("focus");
-    saveCurrentMode("focus");
-  }
+    if (timer) {
+        timer.stop();
+        timer.updateDurations(settings);
+        timer.setMode("focus");
+        saveCurrentMode("focus");
+    }
 
-  if (settings.autoMusic) {
-    lofiPlayer.pause();
-    updateMusicButton();
-  }
+    if (settings.autoMusic) {
+        lofiPlayer.pause();
+        updateMusicButton();
+    }
 
-  lastRenderedSecond = null;
-  lastRenderedMode = null;
+    lastRenderedSecond = null;
+    lastRenderedMode = null;
 
-  renderSettingsForm();
-  renderCycleMode();
-  applyCycleModeLock();
+    renderSettingsForm();
+    renderCycleMode();
+    applyCycleModeLock();
 }
 
 function disableCycleMode() {
-  cycleModeEnabled = false;
-  cycleFocusCount = 0;
+    cycleModeEnabled = false;
+    cycleFocusCount = 0;
 
-  saveCycleMode();
-  saveCycleFocusCount();
+    saveCycleMode();
+    saveCycleFocusCount();
 
-  renderCycleMode();
-  applyCycleModeLock();
+    renderCycleMode();
+    applyCycleModeLock();
 }
 
 function renderCycleMode() {
-  if (!elements.cycleModeSwitch || !elements.cycleModeText) {
-    return;
-  }
+    if (!elements.cycleModeSwitch || !elements.cycleModeText) {
+        return;
+    }
 
-  elements.cycleModeSwitch.checked = cycleModeEnabled;
-  document.body.classList.toggle("cycle-mode-active", cycleModeEnabled);
+    elements.cycleModeSwitch.checked = cycleModeEnabled;
+    document.body.classList.toggle("cycle-mode-active", cycleModeEnabled);
 
-  if (cycleModeEnabled) {
-    const progress = cycleFocusCount % 4;
+    if (cycleModeEnabled) {
+        const progress = cycleFocusCount % 4;
+
+        elements.cycleModeText.textContent =
+            `Mode siklus aktif: Focus 25 menit → Short Break 5 menit → Long Break 15 menit setelah 4 sesi. Progress siklus: ${progress}/4.`;
+
+        return;
+    }
 
     elements.cycleModeText.textContent =
-      `Mode siklus aktif: Focus 25 menit → Short Break 5 menit → Long Break 15 menit setelah 4 sesi. Progress siklus: ${progress}/4.`;
-
-    return;
-  }
-
-  elements.cycleModeText.textContent =
-    "Mode bebas: durasi dan mode bisa diatur manual.";
+        "Mode bebas: durasi dan mode bisa diatur manual.";
 }
 
 function applyCycleModeLock() {
-  if (!elements.cycleModeSwitch) {
-    return;
-  }
+    if (!elements.cycleModeSwitch) {
+        return;
+    }
 
-  elements.modeButtons.forEach((button) => {
-    button.disabled = cycleModeEnabled;
-  });
+    elements.modeButtons.forEach((button) => {
+        button.disabled = cycleModeEnabled;
+    });
 
-  elements.increaseBtn.disabled = cycleModeEnabled;
-  elements.decreaseBtn.disabled = cycleModeEnabled;
-  elements.nextBtn.disabled = cycleModeEnabled;
+    elements.increaseBtn.disabled = cycleModeEnabled;
+    elements.decreaseBtn.disabled = cycleModeEnabled;
+    elements.nextBtn.disabled = cycleModeEnabled;
 
-  elements.focusMinutes.disabled = cycleModeEnabled;
-  elements.shortMinutes.disabled = cycleModeEnabled;
-  elements.longMinutes.disabled = cycleModeEnabled;
-  elements.saveDurationBtn.disabled = cycleModeEnabled;
+    elements.focusMinutes.disabled = cycleModeEnabled;
+    elements.shortMinutes.disabled = cycleModeEnabled;
+    elements.longMinutes.disabled = cycleModeEnabled;
+    elements.saveDurationBtn.disabled = cycleModeEnabled;
 }
 
 function loadCycleMode() {
-  return getJSON(`cycle_mode_${currentUser.username}`, false);
+    return getJSON(`cycle_mode_${currentUser.username}`, false);
 }
 
 function saveCycleMode() {
-  setJSON(`cycle_mode_${currentUser.username}`, cycleModeEnabled);
+    setJSON(`cycle_mode_${currentUser.username}`, cycleModeEnabled);
 }
 
 function loadCycleFocusCount() {
-  return getJSON(`cycle_focus_count_${currentUser.username}`, 0);
+    return getJSON(`cycle_focus_count_${currentUser.username}`, 0);
 }
 
 function saveCycleFocusCount() {
-  setJSON(`cycle_focus_count_${currentUser.username}`, cycleFocusCount);
+    setJSON(`cycle_focus_count_${currentUser.username}`, cycleFocusCount);
 }
 
 function loadSettings() {
@@ -1028,93 +1189,93 @@ function saveSettings() {
 }
 
 function loadStats() {
-  return getJSON(`stats_${currentUser.username}`, createEmptyStats());
+    return getJSON(`stats_${currentUser.username}`, createEmptyStats());
 }
 
 function createEmptyStats() {
-  return {
-    completedSessions: 0,
-    totalFocusMinutes: 0,
-    currentStreak: 0,
-    longestStreak: 0,
-    lastActiveDate: null,
-    dailySessions: {}
-  };
+    return {
+        completedSessions: 0,
+        totalFocusMinutes: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        lastActiveDate: null,
+        dailySessions: {}
+    };
 }
 
 function normalizeStats(rawStats) {
-  const baseStats = createEmptyStats();
+    const baseStats = createEmptyStats();
 
-  const normalized = {
-    ...baseStats,
-    ...rawStats,
-    dailySessions:
-      rawStats && typeof rawStats.dailySessions === "object" && rawStats.dailySessions !== null
-        ? rawStats.dailySessions
-        : {}
-  };
+    const normalized = {
+        ...baseStats,
+        ...rawStats,
+        dailySessions:
+            rawStats && typeof rawStats.dailySessions === "object" && rawStats.dailySessions !== null
+                ? rawStats.dailySessions
+                : {}
+    };
 
-  if (!normalized.lastActiveDate) {
+    if (!normalized.lastActiveDate) {
+        return normalized;
+    }
+
+    const today = getTodayDateKey();
+    const yesterday = getYesterdayDateKey();
+
+    const streakStillValid =
+        normalized.lastActiveDate === today ||
+        normalized.lastActiveDate === yesterday;
+
+    if (!streakStillValid) {
+        normalized.currentStreak = 0;
+    }
+
     return normalized;
-  }
-
-  const today = getTodayDateKey();
-  const yesterday = getYesterdayDateKey();
-
-  const streakStillValid =
-    normalized.lastActiveDate === today ||
-    normalized.lastActiveDate === yesterday;
-
-  if (!streakStillValid) {
-    normalized.currentStreak = 0;
-  }
-
-  return normalized;
 }
 
 function updateFocusCompletionStats() {
-  const today = getTodayDateKey();
-  const yesterday = getYesterdayDateKey();
+    const today = getTodayDateKey();
+    const yesterday = getYesterdayDateKey();
 
-  const sessionsToday = Number(stats.dailySessions[today] || 0);
-  const hasCompletedToday = sessionsToday > 0;
+    const sessionsToday = Number(stats.dailySessions[today] || 0);
+    const hasCompletedToday = sessionsToday > 0;
 
-  stats.completedSessions += 1;
-  stats.totalFocusMinutes += Number(settings.focusMinutes) || 25;
+    stats.completedSessions += 1;
+    stats.totalFocusMinutes += Number(settings.focusMinutes) || 25;
 
-  stats.dailySessions[today] = sessionsToday + 1;
+    stats.dailySessions[today] = sessionsToday + 1;
 
-  if (!hasCompletedToday) {
-    if (stats.lastActiveDate === yesterday) {
-      stats.currentStreak += 1;
-    } else if (stats.lastActiveDate === today) {
-      stats.currentStreak = Math.max(1, stats.currentStreak);
-    } else {
-      stats.currentStreak = 1;
+    if (!hasCompletedToday) {
+        if (stats.lastActiveDate === yesterday) {
+            stats.currentStreak += 1;
+        } else if (stats.lastActiveDate === today) {
+            stats.currentStreak = Math.max(1, stats.currentStreak);
+        } else {
+            stats.currentStreak = 1;
+        }
+
+        stats.lastActiveDate = today;
+        stats.longestStreak = Math.max(stats.longestStreak, stats.currentStreak);
     }
-
-    stats.lastActiveDate = today;
-    stats.longestStreak = Math.max(stats.longestStreak, stats.currentStreak);
-  }
 }
 
 function getTodayDateKey() {
-  return formatDateKey(new Date());
+    return formatDateKey(new Date());
 }
 
 function getYesterdayDateKey() {
-  const date = new Date();
-  date.setDate(date.getDate() - 1);
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
 
-  return formatDateKey(date);
+    return formatDateKey(date);
 }
 
 function formatDateKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
 
-  return `${year}-${month}-${day}`;
+    return `${year}-${month}-${day}`;
 }
 
 function saveStats() {
@@ -1158,6 +1319,184 @@ function showMessage(element, message, type) {
 function clearMessage(element) {
     element.textContent = "";
     element.classList.remove("error", "success");
+}
+
+function getSelectedMusicTrack() {
+    const selectedTrack = MUSIC_TRACKS.find((track) => {
+        return track.id === settings.selectedMusic;
+    });
+
+    return selectedTrack || MUSIC_TRACKS[0];
+}
+
+async function playMusicSafely() {
+    try {
+        lofiPlayer.setTrack(getSelectedMusicTrack());
+        await lofiPlayer.play();
+        updateMusicButton();
+    } catch {
+        showToast(
+            "Musik tidak dapat diputar",
+            "Pastikan file audio tersedia atau gunakan Lofi Synth Bawaan."
+        );
+    }
+}
+
+function applyTheme() {
+    const isDark = settings.theme === "dark";
+
+    document.body.classList.toggle("theme-dark", isDark);
+
+    elements.themeToggleIcon.className = isDark
+        ? "bi bi-sun"
+        : "bi bi-moon-stars";
+}
+
+function renderFocusedTask() {
+    const focusedTask = getFocusedTask();
+
+    if (!focusedTask) {
+        elements.focusedTaskName.textContent = "Belum ada task dipilih";
+        elements.focusedTaskBox.classList.remove("has-focused-task");
+        elements.clearFocusedTaskBtn.disabled = true;
+        return;
+    }
+
+    elements.focusedTaskName.textContent = focusedTask.name;
+    elements.focusedTaskBox.classList.add("has-focused-task");
+    elements.clearFocusedTaskBtn.disabled = false;
+}
+
+function getFocusedTask() {
+    if (!focusedTaskId) {
+        return null;
+    }
+
+    const tasks = TodoService.getAll(currentUser.username);
+
+    return tasks.find((task) => task.id === focusedTaskId) || null;
+}
+
+function loadFocusedTaskId() {
+    return getJSON(`focused_task_${currentUser.username}`, null);
+}
+
+function saveFocusedTaskId() {
+    setJSON(`focused_task_${currentUser.username}`, focusedTaskId);
+}
+
+function renderDailyTarget() {
+    const today = getTodayDateKey();
+    const todaySessions = Number(stats.dailySessions[today] || 0);
+    const target = Number(settings.dailyTarget || 4);
+
+    const progressPercent = Math.min(100, (todaySessions / target) * 100);
+
+    elements.dailyTargetSelect.value = String(target);
+    elements.dailyTargetProgressBar.style.width = `${progressPercent}%`;
+    elements.dailyTargetProgressText.textContent =
+        `${todaySessions}/${target} sesi selesai hari ini.`;
+
+    if (todaySessions >= target) {
+        elements.dailyTargetProgressText.textContent =
+            `${todaySessions}/${target} sesi selesai. Target hari ini tercapai.`;
+    }
+}
+
+function renderStreakCalendar() {
+    if (!elements.streakCalendar) {
+        return;
+    }
+
+    elements.streakCalendar.innerHTML = "";
+
+    const todayKey = getTodayDateKey();
+
+    for (let offset = 6; offset >= 0; offset -= 1) {
+        const date = new Date();
+        date.setDate(date.getDate() - offset);
+
+        const dateKey = formatDateKey(date);
+        const dayLabel = date.toLocaleDateString("id-ID", {
+            weekday: "short"
+        });
+
+        const hasSession = Number(stats.dailySessions[dateKey] || 0) > 0;
+
+        const item = document.createElement("div");
+        item.className = "streak-day";
+
+        if (hasSession) {
+            item.classList.add("active");
+        }
+
+        if (dateKey === todayKey) {
+            item.classList.add("today");
+        }
+
+        item.innerHTML = `
+      <span class="streak-day-label">${dayLabel}</span>
+      <span class="streak-day-dot"></span>
+    `;
+
+        elements.streakCalendar.appendChild(item);
+    }
+}
+
+function showToast(title, message, duration = 3200) {
+    if (!elements.toastContainer) {
+        return;
+    }
+
+    const toast = document.createElement("div");
+    toast.className = "toast-custom";
+
+    toast.innerHTML = `
+    <i class="bi bi-info-circle-fill"></i>
+    <div>
+      <strong>${escapeHTML(title)}</strong>
+      <span>${escapeHTML(message)}</span>
+    </div>
+  `;
+
+    elements.toastContainer.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = "toastLeave 0.2s ease forwards";
+
+        setTimeout(() => {
+            toast.remove();
+        }, 220);
+    }, duration);
+}
+
+function showSessionCompletePopup(completedMode, nextMode) {
+    const focusedTask = getFocusedTask();
+
+    let title = `${MODES[completedMode].displayName} selesai`;
+    let message = "Bagus. Kamu sudah menyelesaikan satu sesi dengan konsisten.";
+
+    if (completedMode === "focus") {
+        title = "Sesi Focus selesai";
+        message = focusedTask
+            ? `Bagus. Kamu berhasil fokus pada “${focusedTask.name}”. Ambil jeda sejenak agar energi tetap terjaga.`
+            : "Bagus. Kamu sudah menyelesaikan satu sesi Focus. Ambil jeda sejenak sebelum lanjut.";
+    }
+
+    if (completedMode === "short") {
+        message = "Waktu istirahat singkat selesai. Saatnya kembali fokus perlahan.";
+    }
+
+    if (completedMode === "long") {
+        message = "Istirahat panjang selesai. Kamu sudah menyelesaikan satu rangkaian Pomodoro dengan baik.";
+    }
+
+    elements.sessionPopupTitle.textContent = title;
+    elements.sessionPopupMessage.textContent = message;
+    elements.sessionPopupNextText.textContent =
+        `Mode berikutnya: ${MODES[nextMode].displayName}.`;
+
+    elements.sessionPopup.classList.remove("d-none");
 }
 
 function escapeHTML(value) {
