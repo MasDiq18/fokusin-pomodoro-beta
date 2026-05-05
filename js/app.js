@@ -191,19 +191,26 @@ const elements = {
 document.addEventListener("DOMContentLoaded", init);
 
 function init() {
-    setupProgressRing();
-    bindAuthEvents();
-    bindAuthTabEvents();
-    bindAppEvents();
+  setupProgressRing();
+  bindAuthEvents();
+  bindAuthTabEvents();
+  bindAppEvents();
 
-    currentUser = AuthService.getCurrentUser();
+  settings = {
+    ...DEFAULT_SETTINGS,
+    theme: loadGlobalTheme()
+  };
 
-    if (currentUser) {
-        startUserSession();
-    } else {
-        showAuthView();
-        showAuthPanel("login");
-    }
+  applyTheme();
+
+  currentUser = AuthService.getCurrentUser();
+
+  if (currentUser) {
+    startUserSession();
+  } else {
+    showAuthView();
+    showAuthPanel("login");
+  }
 }
 
 function setupProgressRing() {
