@@ -571,18 +571,18 @@ function bindAppEvents() {
     });
 
     elements.themeToggleBtn.addEventListener("click", () => {
-        settings.theme = settings.theme === "dark" ? "light" : "dark";
+  settings.theme = settings.theme === "dark" ? "light" : "dark";
 
-        saveSettings();
-        applyTheme();
+  saveThemePreference();
+  applyTheme();
 
-        showToast(
-            "Tema diperbarui",
-            settings.theme === "dark"
-                ? "Mode gelap diaktifkan."
-                : "Mode terang diaktifkan."
-        );
-    });
+  showToast(
+    "Tema diperbarui",
+    settings.theme === "dark"
+      ? "Mode gelap diaktifkan."
+      : "Mode terang diaktifkan."
+  );
+});
 
     elements.clearFocusedTaskBtn.addEventListener("click", () => {
         focusedTaskId = null;
