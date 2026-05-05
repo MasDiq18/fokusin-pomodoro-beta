@@ -19,12 +19,17 @@
         <div class="container d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h1 class="app-title mb-0">Fokusin</h1>
 
-            <div id="navUser" class="d-none align-items-center gap-2">
-                <span id="welcomeText" class="small text-muted"></span>
-                <button id="profileBtn" class="btn btn-sm btn-outline-secondary">Profil</button>
-                <button id="logoutBtn" class="btn btn-sm btn-outline-danger">Logout</button>
+            <div class="header-actions d-flex align-items-center gap-2">
+                <button id="themeToggleBtn" class="theme-toggle-btn" type="button" title="Ganti tema">
+                    <i id="themeToggleIcon" class="bi bi-moon-stars"></i>
+                </button>
+
+                <div id="navUser" class="d-none align-items-center gap-2">
+                    <span id="welcomeText" class="small text-muted"></span>
+                    <button id="profileBtn" class="btn btn-sm btn-outline-secondary">Profil</button>
+                    <button id="logoutBtn" class="btn btn-sm btn-outline-danger">Logout</button>
+                </div>
             </div>
-        </div>
     </header>
 
     <main class="container main-shell py-4">
@@ -183,6 +188,17 @@
 
                             <div class="panel-divider"></div>
 
+                            <div id="focusedTaskBox" class="focused-task-box mb-4">
+                                <div>
+                                    <span class="focused-task-label">Sedang difokuskan</span>
+                                    <strong id="focusedTaskName">Belum ada task dipilih</strong>
+                                </div>
+
+                                <button id="clearFocusedTaskBtn" class="btn btn-sm btn-outline-secondary" type="button">
+                                    Lepas
+                                </button>
+                            </div>
+
                             <div class="timer-stage">
                                 <div class="progress-ring-container">
                                     <svg id="progressSvg" class="progress-ring-svg" width="360" height="360"
@@ -237,6 +253,34 @@
                                 <div class="session-text">
                                     Sesi <span id="sessionCount">0</span>
                                 </div>
+                            </div>
+
+                            <div class="daily-target-box mt-4">
+                                <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-2">
+                                    <div>
+                                        <strong class="daily-target-title">Target Harian</strong>
+                                        <p class="small text-muted mb-0">Tentukan jumlah sesi Focus hari ini.</p>
+                                    </div>
+                            
+                                    <select id="dailyTargetSelect" class="form-select form-select-sm daily-target-select">
+                                        <option value="1">1 sesi</option>
+                                        <option value="2">2 sesi</option>
+                                        <option value="3">3 sesi</option>
+                                        <option value="4">4 sesi</option>
+                                        <option value="5">5 sesi</option>
+                                        <option value="6">6 sesi</option>
+                                        <option value="8">8 sesi</option>
+                                        <option value="10">10 sesi</option>
+                                    </select>
+                                </div>
+                            
+                                <div class="progress daily-target-progress">
+                                    <div id="dailyTargetProgressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                </div>
+                            
+                                <p id="dailyTargetProgressText" class="small text-muted text-center mt-2 mb-0">
+                                    0/4 sesi selesai hari ini.
+                                </p>
                             </div>
 
                             <div class="cycle-mode-box mt-4">
@@ -355,6 +399,8 @@
                             <p class="small text-muted mt-2 mb-0">
                                 Hari ini: <span id="todaySessionCount">0</span> sesi Focus selesai
                             </p>
+
+                            <div id="streakCalendar" class="streak-calendar mt-4"></div>
                         </div>
                     </div>
                 </div>
@@ -378,6 +424,26 @@
                                     </p>
                                 </div>
                             </div>
+                            
+                            <div class="music-choice mt-4">
+                                <label for="musicTrackSelect" class="form-label small mb-2">
+                                    Pilihan Musik
+                                </label>
+                            
+                                <select id="musicTrackSelect" class="form-select">
+                                    <option value="generated">Lofi Synth Bawaan</option>
+                                    <option value="lofi-chill">Lofi Chill</option>
+                                    <option value="rain-focus">Rain Focus</option>
+                                    <option value="cafe-ambience">Cafe Ambience</option>
+                                    <option value="nature-calm">Nature Calm</option>
+                                </select>
+                            
+                                <p class="small text-muted mt-2 mb-0">
+                                    Untuk pilihan selain bawaan, siapkan file audio di folder <code>audio/</code>.
+                                </p>
+                            </div>
+                            
+                            <audio id="musicAudio" loop preload="none"></audio>
 
                             <div class="d-flex flex-wrap align-items-center gap-3 mt-4">
                                 <button id="musicToggleBtn" class="btn btn-outline-secondary">
@@ -468,6 +534,32 @@
             </div>
         </section>
     </main>
+
+    <div id="toastContainer" class="toast-container-custom"></div>
+    
+    <div id="sessionPopup" class="session-popup-backdrop d-none">
+        <div class="session-popup-card">
+            <div class="session-popup-icon">
+                <i class="bi bi-stars"></i>
+            </div>
+    
+            <h3 id="sessionPopupTitle" class="session-popup-title">
+                Sesi selesai
+            </h3>
+    
+            <p id="sessionPopupMessage" class="session-popup-message">
+                Bagus. Kamu sudah menyelesaikan satu sesi fokus.
+            </p>
+    
+            <p id="sessionPopupNextText" class="session-popup-next">
+                Lanjut ke sesi berikutnya.
+            </p>
+    
+            <button id="sessionPopupActionBtn" class="btn btn-accent w-100" type="button">
+                Lanjut
+            </button>
+        </div>
+    </div>
 
     <script type="module" src="./js/app.js"></script>
 </body>
